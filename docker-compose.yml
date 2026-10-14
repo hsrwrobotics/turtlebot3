@@ -1,0 +1,15 @@
+services:
+  turtlebot3:
+    image: tsecretino/turtlebot3:${ROS_DISTRO:-jazzy}
+    container_name: turtlebot3
+    # DDS discovery and shared memory need the host network and IPC.
+    network_mode: host
+    ipc: host
+    # OpenCR (/dev/ttyACM0) and LDS (/dev/ttyUSB0); /dev mount survives re-plugs.
+    privileged: true
+    volumes:
+      - /dev:/dev
+    environment:
+      ROS_DOMAIN_ID: ${ROS_DOMAIN_ID:-30}
+      LDS_MODEL: ${LDS_MODEL:-LDS-01}
+    restart: unless-stopped
