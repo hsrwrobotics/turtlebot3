@@ -15,6 +15,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         ros-${ROS_DISTRO}-turtlebot3-msgs \
         ros-${ROS_DISTRO}-dynamixel-sdk \
         ros-${ROS_DISTRO}-xacro \
+        ros-${ROS_DISTRO}-rmw-zenoh-cpp \
     && rm -rf /var/lib/apt/lists/*
 
 ADD https://github.com/ROBOTIS-GIT/turtlebot3.git#${ROS_DISTRO} ${TB3_WS}/src/turtlebot3

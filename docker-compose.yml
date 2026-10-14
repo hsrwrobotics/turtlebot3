@@ -2,9 +2,7 @@ services:
   turtlebot3:
     image: tsecretino/turtlebot3:${ROS_DISTRO:-jazzy}
     container_name: turtlebot3
-    # DDS discovery and shared memory need the host network and IPC.
     network_mode: host
-    ipc: host
     # OpenCR (/dev/ttyACM0) and LDS (/dev/ttyUSB0); /dev mount survives re-plugs.
     privileged: true
     volumes:
@@ -12,4 +10,9 @@ services:
     environment:
       ROS_DOMAIN_ID: ${ROS_DOMAIN_ID:-30}
       LDS_MODEL: ${LDS_MODEL:-LDS-01}
+      RMW_IMPLEMENTATION: rmw_zenoh_cpp
+      # Connect to the Zenoh router running on the server.
+      ZENOH_CONFIG_OVERRIDE: 'connect/endpoints=["tcp/${ZENOH_ROUTER_IP:?set ZENOH_ROUTER_IP}:7447"]'
+      # 0 = wait until the router is reachable before starting nodes.
+      ZENOH_ROUTER_CHECK_ATTEMPTS: 0
     restart: unless-stopped
