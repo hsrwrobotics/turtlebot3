@@ -12,7 +12,6 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # from ros-base and only installs what the launch files actually need.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         python3-colcon-common-extensions \
-        python3-rosdep \
         build-essential \
         libboost-system-dev \
         libudev-dev \
@@ -35,9 +34,12 @@ RUN git clone --depth=1 --branch ${ROS_DISTRO} https://github.com/ROBOTIS-GIT/tu
  && git clone --depth=1 --branch ${ROS_DISTRO} https://github.com/ROBOTIS-GIT/coin_d4_driver.git ${TB3_WS}/src/coin_d4_driver
 
 WORKDIR ${TB3_WS}
+# Don't run rosdep install: turtlebot3 package.xmls declare exec_depend on
+# turtlebot3_cartographer and turtlebot3_navigation2 (which we delete) and
+# rosdep then tries to apt-install them as ros-*-turtlebot3-cartographer
+# packages that don't exist, failing the build. All transitive build deps
+# for the kept packages are installed explicitly above.
 RUN rm -rf src/turtlebot3/turtlebot3_cartographer src/turtlebot3/turtlebot3_navigation2 \
- && rosdep update --rosdistro=${ROS_DISTRO} \
- && rosdep install --from-paths src --ignore-src -r -y --rosdistro=${ROS_DISTRO} \
  && . /opt/ros/${ROS_DISTRO}/setup.sh \
  && colcon build --merge-install \
  && rm -rf build log src/*/build src/*/.git src/*/log
