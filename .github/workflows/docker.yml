@@ -30,10 +30,14 @@ jobs:
         with:
           context: .
           platforms: linux/arm64
-          build-args: ROS_DISTRO=${{ matrix.ros_distro }}
+          build-args: |
+            ROS_DISTRO=${{ matrix.ros_distro }}
+            REBUILD_AT=${{ github.run_id }}
+            LDS_MODEL=LDS-01
           push: ${{ github.event_name != 'pull_request' }}
           tags: |
             ${{ env.IMAGE }}:${{ matrix.ros_distro }}
             ${{ env.IMAGE }}:${{ matrix.ros_distro }}-${{ github.sha }}
           cache-from: type=gha,scope=${{ matrix.ros_distro }}
           cache-to: type=gha,mode=max,scope=${{ matrix.ros_distro }}
+          provenance: false
