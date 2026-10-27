@@ -12,7 +12,10 @@ services:
       LDS_MODEL: ${LDS_MODEL:-LDS-01}
       RMW_IMPLEMENTATION: rmw_zenoh_cpp
       # Connect to the Zenoh router running on the server.
-      ZENOH_CONFIG_OVERRIDE: 'connect/endpoints=["tcp/${ZENOH_ROUTER_IP:?set ZENOH_ROUTER_IP}:7447"]'
+      # mode="client": one session to the router, the router forwards. Peer
+      # mode would gossip the other hosts' loopback-only locators and try to
+      # dial them, which cannot work across machines.
+      ZENOH_CONFIG_OVERRIDE: 'mode="client";connect/endpoints=["tcp/${ZENOH_ROUTER_IP:?set ZENOH_ROUTER_IP}:7447"]'
       # 0 = wait until the router is reachable before starting nodes.
       ZENOH_ROUTER_CHECK_ATTEMPTS: 0
     restart: unless-stopped
