@@ -19,3 +19,20 @@ services:
       # 0 = wait until the router is reachable before starting nodes.
       ZENOH_ROUTER_CHECK_ATTEMPTS: 0
     restart: unless-stopped
+
+  # Flash the OpenCR firmware (manual: OpenCR Setup page).
+  # The updater needs the OpenCR port, so stop the robot first:
+  #   docker compose stop turtlebot3
+  #   docker compose --profile tools run --rm opencr-flash
+  opencr-flash:
+    image: tsecretino/turtlebot3:${ROS_DISTRO:-jazzy}
+    profiles: ["tools"]
+    network_mode: host
+    volumes:
+      - /dev:/dev
+    environment:
+      OPENCR_PORT: ${OPENCR_PORT:-/dev/ttyACM0}
+      OPENCR_MODEL: ${OPENCR_MODEL:-burger}
+    entrypoint: ["/usr/local/bin/flash-opencr"]
+    command: []
+    restart: "no"

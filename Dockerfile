@@ -75,6 +75,35 @@ RUN . /opt/ros/${ROS_DISTRO}/setup.sh \
 RUN echo 'source /opt/ros/${ROS_DISTRO}/setup.bash' >> /root/.bashrc \
  && echo 'source ${TB3_WS}/install/setup.bash' >> /root/.bashrc
 
+# OpenCR firmware updater (manual: "OpenCR Setup" page).
+# The loader inside opencr_update.tar.bz2 is a 32-bit ARM binary, so the armhf
+# libc is needed, exactly as the manual installs it on the SBC.
+RUN dpkg --add-architecture armhf \
+ && { [ ! -f /etc/apt/sources.list.d/ubuntu.sources ] || sed -i -E 's/^Architectures:.*/Architectures: arm64 armhf/' /etc/apt/sources.list.d/ubuntu.sources; } \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends libc6:armhf \
+ && rm -rf /var/lib/apt/lists/*
+
+ARG OPENCR_BINARIES_URL=https://github.com/ROBOTIS-GIT/OpenCR-Binaries/raw/master/turtlebot3/ROS2/latest/opencr_update.tar.bz2
+RUN mkdir -p /opt/opencr_update \
+ && curl -sSL -o /tmp/opencr_update.tar.bz2 "$OPENCR_BINARIES_URL" \
+ && tar -xj -C /opt/opencr_update --strip-components=1 /tmp/opencr_update.tar.bz2 \
+ && rm -f /tmp/opencr_update.tar.bz2 \
+ && chmod +x /opt/opencr_update/update.sh /opt/opencr_update/opencr_ld_shell_arm \
+                 /opt/opencr_update/opencr_ld_shell_x86
+
+COPY --chmod=755 <<'EOF' /usr/local/bin/flash-opencr
+#!/bin/bash
+# Flash the OpenCR firmware (manual: OpenCR Setup page).
+#   OPENCR_PORT=/dev/ttyACM0 OPENCR_MODEL=burger flash-opencr
+# The robot must not be running, the updater needs the OpenCR port.
+set -e
+PORT="${OPENCR_PORT:-/dev/ttyACM0}"
+MODEL="${OPENCR_MODEL:-burger}"
+cd /opt/opencr_update
+echo "Flashing ${MODEL}.opencr to ${PORT}"
+exec ./update.sh "$PORT" "${MODEL}.opencr"
+EOF
 COPY --chmod=755 <<'EOF' /tb3_entrypoint.sh
 #!/bin/bash
 set -e
