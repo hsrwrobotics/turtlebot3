@@ -88,10 +88,12 @@ ARG OPENCR_BINARIES_URL=https://github.com/ROBOTIS-GIT/OpenCR-Binaries/raw/maste
 # -f on curl so an HTTP error fails the build instead of writing an error page.
 # tar reads the archive from the file operand, so no -C before it: with -C in
 # front, tar takes the path as a member name and reads the archive from stdin.
+# No -j either: opencr_update.tar.bz2 is gzip despite the name, GNU tar would
+# force bzip2 on it. Plain -xf detects the compression.
 RUN mkdir -p /opt/opencr_update \
  && curl -sSLf -o /tmp/opencr_update.tar.bz2 "$OPENCR_BINARIES_URL" \
  && cd /opt/opencr_update \
- && tar -xjf /tmp/opencr_update.tar.bz2 --strip-components=1 \
+ && tar -xf /tmp/opencr_update.tar.bz2 --strip-components=1 \
  && rm -f /tmp/opencr_update.tar.bz2 \
  && chmod +x update.sh opencr_ld_shell_arm opencr_ld_shell_x86
 
