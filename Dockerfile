@@ -1,89 +1,88 @@
+# TurtleBot3 SBC image.
+#
+# Reproduces the ROBOTIS "TurtleBot3 SBC Setup" manual inside a container:
+#   https://emanual.robotis.com/docs/en/platform/turtlebot3/sbc_setup/
+#
+# Manual steps, in order:
+#   1. ROS 2 Jazzy/Humble, "ROS-Base (Bare Bones)" -> base image ros:${ROS_DISTRO}-ros-base
+#   2. apt install python3-argcomplete python3-colcon-common-extensions
+#        libboost-system-dev build-essential
+#      apt install ros-${ROS_DISTRO}-hls-lfcd-lds-driver
+#      apt install ros-${ROS_DISTRO}-turtlebot3-msgs
+#      apt install ros-${ROS_DISTRO}-dynamixel-sdk
+#      apt install ros-${ROS_DISTRO}-xacro
+#      apt install libudev-dev
+#   3. git clone turtlebot3, ld08_driver, coin_d4_driver into ~/turtlebot3_ws/src
+#   4. rm -r turtlebot3_cartographer turtlebot3_navigation2
+#   5. colcon build --symlink-install --parallel-workers 1
+#   6. source /opt/ros/<distro>/setup.bash and ~/turtlebot3_ws/install/setup.bash
+#   7. ros2 launch turtlebot3_bringup robot.launch.py
+#
+# Only addition to the manual: ros-${ROS_DISTRO}-rmw-zenoh-cpp is installed.
+# The RMW is not switched here, so a plain `docker run` behaves exactly like
+# the manual (DDS). docker-compose.yml selects rmw_zenoh_cpp when the robot
+# talks to a Zenoh router.
+
 ARG ROS_DISTRO=jazzy
-ARG LDS_MODEL=LDS-01
 
-# ---------- builder ----------
-FROM ros:${ROS_DISTRO}-ros-base AS builder
+FROM ros:${ROS_DISTRO}-ros-base
 ARG ROS_DISTRO
-ENV DEBIAN_FRONTEND=noninteractive \
-    TB3_WS=/root/turtlebot3_ws
 
-# Build-time only deps: build-essential, libboost-system-dev, libudev-dev,
-# python3-colcon-common-extensions, python3-rosdep. The runtime stage starts
-# from ros-base and only installs what the launch files actually need.
+ENV DEBIAN_FRONTEND=noninteractive \
+    TB3_WS=/root/turtlebot3_ws \
+    ROS_DOMAIN_ID=30 \
+    TURTLEBOT3_MODEL=burger \
+    LDS_MODEL=LDS-01
+
+# 2. Packages (manual: "Install and Build ROS Packages")
 RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3-argcomplete \
         python3-colcon-common-extensions \
-        build-essential \
         libboost-system-dev \
-        libudev-dev \
+        build-essential \
         ros-${ROS_DISTRO}-hls-lfcd-lds-driver \
         ros-${ROS_DISTRO}-turtlebot3-msgs \
         ros-${ROS_DISTRO}-dynamixel-sdk \
         ros-${ROS_DISTRO}-xacro \
+        libudev-dev \
         ros-${ROS_DISTRO}-rmw-zenoh-cpp \
     && rm -rf /var/lib/apt/lists/*
 
-# REBUILD_AT forces this layer's checksum to change every build (CI passes
-# $(date +%s) via --build-arg). Without it, `git clone` layers cache by the
-# command string and would never see upstream updates. The shallow clone +
-# reset-to-origin trick guarantees a fresh tip on each rebuild.
+# 3. Sources (manual: git clone into ~/turtlebot3_ws/src).
+# REBUILD_AT is not used in the command; it only invalidates this layer so
+# every build fetches the current upstream tip instead of a cached clone.
 ARG REBUILD_AT
-RUN git clone --depth=1 --branch ${ROS_DISTRO} https://github.com/ROBOTIS-GIT/turtlebot3.git ${TB3_WS}/src/turtlebot3 \
- && git -C ${TB3_WS}/src/turtlebot3 fetch --depth=1 origin ${ROS_DISTRO} \
- && git -C ${TB3_WS}/src/turtlebot3 reset --hard origin/${ROS_DISTRO} \
+RUN mkdir -p ${TB3_WS}/src \
+ && git clone --depth=1 --branch ${ROS_DISTRO} https://github.com/ROBOTIS-GIT/turtlebot3.git ${TB3_WS}/src/turtlebot3 \
  && git clone --depth=1 --branch ${ROS_DISTRO} https://github.com/ROBOTIS-GIT/ld08_driver.git ${TB3_WS}/src/ld08_driver \
  && git clone --depth=1 --branch ${ROS_DISTRO} https://github.com/ROBOTIS-GIT/coin_d4_driver.git ${TB3_WS}/src/coin_d4_driver
 
-WORKDIR ${TB3_WS}
-# Don't run rosdep install: turtlebot3 package.xmls declare exec_depend on
-# turtlebot3_cartographer and turtlebot3_navigation2 (which we delete) and
-# rosdep then tries to apt-install them as ros-*-turtlebot3-cartographer
-# packages that don't exist, failing the build. All transitive build deps
-# for the kept packages are installed explicitly above.
-RUN rm -rf src/turtlebot3/turtlebot3_cartographer src/turtlebot3/turtlebot3_navigation2 \
- && . /opt/ros/${ROS_DISTRO}/setup.sh \
- && colcon build --merge-install \
- && rm -rf build log src/*/build src/*/.git src/*/log
+# 4. The manual drops these two packages before building.
+RUN rm -r ${TB3_WS}/src/turtlebot3/turtlebot3_cartographer \
+          ${TB3_WS}/src/turtlebot3/turtlebot3_navigation2
 
-# ---------- runtime ----------
-FROM ros:${ROS_DISTRO}-ros-base
-ARG ROS_DISTRO
-ARG LDS_MODEL
-ENV DEBIAN_FRONTEND=noninteractive \
-    TB3_WS=/root/turtlebot3_ws \
-    LDS_MODEL=${LDS_MODEL}
+# 5. Build (manual: colcon build --symlink-install --parallel-workers 1).
+# --symlink-install keeps install/ pointing at src/ and build/, so both stay
+# in the image and the workspace can be rebuilt inside the container.
+# --parallel-workers 1 is the manual's setting for 2 GB boards; a build
+# machine with more RAM can override COLCON_BUILD_ARGS.
+ARG COLCON_BUILD_ARGS="--symlink-install --parallel-workers 1"
+RUN . /opt/ros/${ROS_DISTRO}/setup.sh \
+ && cd ${TB3_WS} \
+ && colcon build ${COLCON_BUILD_ARGS}
 
-# LDS-01 ships as an apt package; LDS-02/LDS-03 are built from the local
-# ld08_driver / coin_d4_driver sources and live in ${TB3_WS}/install, so the
-# runtime only needs the apt driver when LDS_MODEL=LDS-01.
-RUN apt-get update \
- && case "${LDS_MODEL}" in \
-        LDS-01) apt-get install -y --no-install-recommends ros-${ROS_DISTRO}-hls-lfcd-lds-driver ;; \
-        LDS-02|LDS-03) ;; \
-        *) echo "Unknown LDS_MODEL: ${LDS_MODEL}"; exit 1 ;; \
-    esac \
- && apt-get install -y --no-install-recommends \
-        python3-argcomplete \
-        ros-${ROS_DISTRO}-turtlebot3-msgs \
-        ros-${ROS_DISTRO}-dynamixel-sdk \
-        ros-${ROS_DISTRO}-xacro \
-        ros-${ROS_DISTRO}-rmw-zenoh-cpp \
- && rm -rf /var/lib/apt/lists/*
-
-COPY --from=builder ${TB3_WS}/install ${TB3_WS}/install
+# 6. Environment (manual: source ... >> ~/.bashrc)
+RUN echo 'source /opt/ros/${ROS_DISTRO}/setup.bash' >> /root/.bashrc \
+ && echo 'source ${TB3_WS}/install/setup.bash' >> /root/.bashrc
 
 COPY --chmod=755 <<'EOF' /tb3_entrypoint.sh
 #!/bin/bash
 set -e
-source "/opt/ros/${ROS_DISTRO}/setup.bash"
-source "${TB3_WS}/install/setup.bash"
+# Same as the base image entrypoint (ros_entrypoint.sh), plus the workspace.
+source "/opt/ros/${ROS_DISTRO}/setup.bash" --
+source "${TB3_WS}/install/setup.bash" --
 exec "$@"
 EOF
-
-RUN echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> /root/.bashrc \
- && echo "source ${TB3_WS}/install/setup.bash" >> /root/.bashrc
-
-ENV ROS_DOMAIN_ID=30 \
-    TURTLEBOT3_MODEL=burger
 
 ENTRYPOINT ["/tb3_entrypoint.sh"]
 CMD ["ros2", "launch", "turtlebot3_bringup", "robot.launch.py"]
