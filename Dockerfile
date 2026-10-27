@@ -85,12 +85,15 @@ RUN dpkg --add-architecture armhf \
  && rm -rf /var/lib/apt/lists/*
 
 ARG OPENCR_BINARIES_URL=https://github.com/ROBOTIS-GIT/OpenCR-Binaries/raw/master/turtlebot3/ROS2/latest/opencr_update.tar.bz2
+# -f on curl so an HTTP error fails the build instead of writing an error page.
+# tar reads the archive from the file operand, so no -C before it: with -C in
+# front, tar takes the path as a member name and reads the archive from stdin.
 RUN mkdir -p /opt/opencr_update \
- && curl -sSL -o /tmp/opencr_update.tar.bz2 "$OPENCR_BINARIES_URL" \
- && tar -xj -C /opt/opencr_update --strip-components=1 /tmp/opencr_update.tar.bz2 \
+ && curl -sSLf -o /tmp/opencr_update.tar.bz2 "$OPENCR_BINARIES_URL" \
+ && cd /opt/opencr_update \
+ && tar -xjf /tmp/opencr_update.tar.bz2 --strip-components=1 \
  && rm -f /tmp/opencr_update.tar.bz2 \
- && chmod +x /opt/opencr_update/update.sh /opt/opencr_update/opencr_ld_shell_arm \
-                 /opt/opencr_update/opencr_ld_shell_x86
+ && chmod +x update.sh opencr_ld_shell_arm opencr_ld_shell_x86
 
 COPY --chmod=755 <<'EOF' /usr/local/bin/flash-opencr
 #!/bin/bash
