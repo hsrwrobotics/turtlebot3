@@ -58,15 +58,35 @@ Steps from the manual that must stay on the host:
 
 The image carries the official OpenCR updater (`opencr_update.tar.bz2` from
 `OpenCR-Binaries`) plus the `armhf` libc its loader needs, so the flash runs
-in the container like the manual runs it on the SBC:
+in the container like the manual runs it on the SBC.
+
+**Flash once per board, not on every start.** The firmware goes into the
+OpenCR's flash memory and stays there. Nothing flashes automatically, and it
+cannot: the board is a physical USB device, so it is not attached while the
+image is built (CI builds on a runner with no robot), and a failed upload
+needs recovery mode, which is a physical button press.
+
+First time on a robot:
 
 ```bash
-docker compose stop turtlebot3
+docker compose pull
+docker compose stop turtlebot3              # if it was running
 docker compose --profile tools run --rm opencr-flash
+docker compose up -d
+ros2 node list                               # /turtlebot3_node must appear
 ```
 
-Stop the robot first: the updater needs exclusive access to the OpenCR port
-(`/dev/ttyACM0`) and `turtlebot3_ros` holds it while running.
+Every other start:
+
+```bash
+docker compose up -d
+```
+
+Flash again only if the firmware changed (the image ships `OpenCR-Binaries`
+`ROS2/latest` at build time) or the board lost its firmware.
+
+Stop the robot before flashing: the updater needs exclusive access to the
+OpenCR port (`/dev/ttyACM0`) and `turtlebot3_ros` holds it while running.
 
 Overrides via `.env`:
 
@@ -77,7 +97,7 @@ OPENCR_MODEL=burger   # burger or waffle
 
 If the upload fails, put the board in recovery mode and run it again: hold
 `PUSH SW2`, press `Reset`, release `Reset`, release `PUSH SW2` (the STATUS LED
-blinks while in recovery mode).
+blinks while in recovery mode). See the [OpenCR setup][opencr] page.
 
 ## Run
 
@@ -88,6 +108,8 @@ Set `LDS_MODEL` to the lidar on your robot (`LDS-01`, `LDS-02` or `LDS-03`).
 docker compose up -d
 docker compose logs -f
 ```
+
+Routine start, no flashing involved (the OpenCR keeps its firmware).
 
 Shell inside the running container:
 
