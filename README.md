@@ -28,6 +28,7 @@ Images (linux/arm64) are pushed to Docker Hub by GitHub Actions on every push to
 | `export LDS_MODEL=LDS-01\|02\|03` | `ENV LDS_MODEL=LDS-01`, override in compose |
 | `export TURTLEBOT3_MODEL=burger` | `ENV TURTLEBOT3_MODEL=burger` |
 | udev rules for OpenCR/LDS | host step, see below |
+| OpenCR Setup: `dpkg --add-architecture armhf`, `apt install libc6:armhf`, `wget opencr_update.tar.bz2`, `./update.sh $OPENCR_PORT $OPENCR_MODEL.opencr` | `flash-opencr` in the image, see below |
 | `ros2 launch turtlebot3_bringup robot.launch.py` | container `CMD` |
 
 One package is added: `ros-$ROS_DISTRO-rmw-zenoh-cpp`. It is installed but not
@@ -51,7 +52,32 @@ Steps from the manual that must stay on the host:
    The rules set `ID_MM_DEVICE_IGNORE=1` for the OpenCR USB serial device, so
    ModemManager does not swallow the port.
 
-5. OpenCR firmware is flashed separately, see the [OpenCR setup][opencr] page.
+5. OpenCR firmware: the image can flash it, see "OpenCR firmware" below.
+
+## OpenCR firmware
+
+The image carries the official OpenCR updater (`opencr_update.tar.bz2` from
+`OpenCR-Binaries`) plus the `armhf` libc its loader needs, so the flash runs
+in the container like the manual runs it on the SBC:
+
+```bash
+docker compose stop turtlebot3
+docker compose --profile tools run --rm opencr-flash
+```
+
+Stop the robot first: the updater needs exclusive access to the OpenCR port
+(`/dev/ttyACM0`) and `turtlebot3_ros` holds it while running.
+
+Overrides via `.env`:
+
+```bash
+OPENCR_PORT=/dev/ttyACM0
+OPENCR_MODEL=burger   # burger or waffle
+```
+
+If the upload fails, put the board in recovery mode and run it again: hold
+`PUSH SW2`, press `Reset`, release `Reset`, release `PUSH SW2` (the STATUS LED
+blinks while in recovery mode).
 
 ## Run
 
